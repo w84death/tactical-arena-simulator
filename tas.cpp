@@ -31,20 +31,25 @@
 #include <time.h>
 #include <math.h>
 
-// SYSTEM VARS
+// SYSTEM SETTINGS
 // ----------------------------------------------------------------------------
-
 
 bool fullscreen_mode  = true;
 char win_title[]      = "TACTICAL ARENA SIMULATOR";
-static float VERSION  = 0.5f;
+static float VERSION  = 0.3f;
 int win_width         = 512;
 int win_height        = 384;
 int win_x             = 256;
 int win_y             = 100;
 
+// RENDERING SETTINGS
+// ----------------------------------------------------------------------------
+
 static int FPS        = 60;
 int refresh_ms        = 1000/FPS;
+
+// CAMERA SETTINGS
+// ----------------------------------------------------------------------------
 
 static float FOV      = 60.0f;
 int cam_mode          = 0;
@@ -58,35 +63,38 @@ float cam_fog_start   = 6.0f;
 float cam_fog_end     = 40.0f;
 float cam_clear_color[4] = {0.3f, 0.05f, 0.6f, 1.0f};
 
-// AUTOMATON VARS
+// ARENA SETTINGS
 // ----------------------------------------------------------------------------
-static int CELLS_ARRAY_SIZE[]    = {32, 32};
-static int ENTITIES_SIZE_MAX     = 32;
-static int ENTITIES_SIZE_START   = 32;
-static int MAX_CELLS             = CELLS_ARRAY_SIZE[0]*CELLS_ARRAY_SIZE[1];
-int half[]                       = {CELLS_ARRAY_SIZE[0] * 0.5,  CELLS_ARRAY_SIZE[1] * 0.5};
+static int CELLS_ARRAY_SIZE[]     = {32, 32};
+static int ENTITIES_SIZE_MAX      = 64;
+static int ENTITIES_SIZE_START    = 8;
+static int MAX_CELLS              = CELLS_ARRAY_SIZE[0]*CELLS_ARRAY_SIZE[1];
+int half[]                        = {CELLS_ARRAY_SIZE[0] * 0.5, CELLS_ARRAY_SIZE[1] * 0.5};
+
 float arena_array[32][32];
-float entities[32][4]   = {{16, 16, 0, 0.8}};
-bool entities_rotated[32];
+float entities[64][4]             = {{16, 16, 0, 0.8}};
+bool entities_rotated[64];
 
-static int REALTIME     = true;
-static int LOGIC_MS     = 1000/12;
+static int REALTIME               = true;
+static int LOGIC_FPS              = 1000/24;
 
-static float RANDOM_MIN_COLOUR = 0.05f;
-static float RANDOM_MAX_COLOUR = 0.2f;
+static float RANDOM_MIN_COLOUR    = 0.05f;
+static float RANDOM_MAX_COLOUR    = 0.2f;
 
-static float GROUND   = 0.4f;
-static float WALL     = 0.5f;
-static float WALL_MAX = 1.0f;
-static float LOWER    = 0.05f;
-static float LOWER_P  = 0.1f;
-static float EXPAND   = 0.001f;
+static float GROUND               = 0.4f;
+static float WALL                 = 0.5f;
+static float WALL_MAX             = 1.0f;
+static float LOWER                = 0.05f;
+static float LOWER_P              = 0.1f;
+static float EXPAND               = 0.001f;
 
-int STATE               = 0;
-static int S_INT        = 0;
-static int S_MENU       = 2;
-static int S_SIMULATION = 4;
-static int S_CREDITS    = 8;
+static bool WALL_CAN_BE_DESTROYED = false;
+
+int STATE                         = 0;
+static int S_INT                  = 0;
+static int S_MENU                 = 2;
+static int S_SIMULATION           = 4;
+static int S_CREDITS              = 8;
 
 
 
@@ -178,40 +186,56 @@ float random_fcolor(){
 // ----------------------------------------------------------------------------
 
 
+void arena_spawn_entity(int ai){
+  int free_id = 0;
+
+  for (int i = 1; i < ENTITIES_SIZE_MAX; i++){
+    if (entities[i][3] == 0.0f){
+      free_id = i;
+      break;
+    }
+  }
+
+  if (free_id > 0){
+    entities[free_id][0] = 4+(float)(int)(random_f() * (CELLS_ARRAY_SIZE[0]-8));
+    entities[free_id][1] = 4+(float)(int)(random_f() * (CELLS_ARRAY_SIZE[1]-8));
+    entities[free_id][2] = (float)(int)(random_f() * 4);
+    entities[free_id][3] = 1.0f;
+    entities_rotated[free_id] = false;
+  }
+}
 
 void arena_setup(){
   for (int y = 0; y < CELLS_ARRAY_SIZE[1]; y++){
   for (int x = 0; x < CELLS_ARRAY_SIZE[0]; x++){
     if (x == 0  or x == CELLS_ARRAY_SIZE[0]-1  or y == 0 or y == CELLS_ARRAY_SIZE[1] -1 ){
-      arena_array[x][y] = WALL_MAX; 
+      arena_array[x][y] = WALL_MAX;
     }else{
-      arena_array[x][y] = GROUND; 
+      arena_array[x][y] = GROUND;
     }
-     
+
   }}
 
   for (int i = 1; i < ENTITIES_SIZE_MAX; i++){
     if (i < ENTITIES_SIZE_START){
-      entities[i][0] = 4+(float)(int)(random_f() * (CELLS_ARRAY_SIZE[0]-8));  
-      entities[i][1] = 4+(float)(int)(random_f() * (CELLS_ARRAY_SIZE[1]-8));  
-      entities[i][2] = (float)(int)(random_f() * 4);
-      entities[i][3] = 0.5f; 
+      arena_spawn_entity(0);
     }else{
-      entities[i][0] = 0;  
-      entities[i][1] = 0;  
-      entities[i][2] = 0;  
-      entities[i][3] = 0; 
+      entities[i][0] = 0.0f;
+      entities[i][1] = 0.0f;
+      entities[i][2] = 0;
+      entities[i][3] = 0.0f;
+      entities_rotated[i] = false;
     }
-    entities_rotated[i] = false;
-    
+
+
   }
 }
 
 void arena_draw_terrain_tile(float x, float y, float z){
   glPushMatrix();
-  
+
       glTranslatef (x, y, 0.0f);
-    
+
     glColorMaterial ( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE ) ;
     glEnable ( GL_COLOR_MATERIAL ) ;
     float color[] = {z, z, z, 1.0f};
@@ -222,7 +246,7 @@ void arena_draw_terrain_tile(float x, float y, float z){
       color[2] = 0.9f;
     }
     glColor4f(color[0], color[1], color[2], 1.0f);
-    
+
     float size = 0.5f;
 
     glBegin(GL_POLYGON);
@@ -240,12 +264,11 @@ void  arena_draw_terrain(){
   for (int y = 0; y < CELLS_ARRAY_SIZE[1]; y++){
   for (int x = 0; x < CELLS_ARRAY_SIZE[0]; x++){
     tile = arena_array[x][y];
-    arena_draw_terrain_tile(x, y, tile);  
+    arena_draw_terrain_tile(x, y, tile);
   }}
 }
 
 void arena_draw_player_model(int e){
- 
   int x = entities[e][0];
   int y = entities[e][1];
   int rot = entities[e][2];
@@ -257,6 +280,7 @@ void arena_draw_player_model(int e){
     glTranslatef ((float)x, (float)y, 0.1f);
     glColorMaterial ( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE ) ;
     glEnable ( GL_COLOR_MATERIAL ) ;
+
     if(e==0){
       glColor4f(0.4f, 0.4f, 1.0f, 1.0f);
     }else{
@@ -264,31 +288,28 @@ void arena_draw_player_model(int e){
     }
 
     glBegin(GL_POLYGON);
-
-    switch(rot){
-      case 0:
-       glVertex3d(-size, 0, 0.0f);
-       glVertex3d(0, size, 0.0f);
-       glVertex3d(size, 0, 0.0f);
-      break;
-      case 1:
-       glVertex3d(size, 0, 0.0f);
-       glVertex3d(0, -size, 0.0f);
-       glVertex3d(0, size, 0.0f);
-      break;
-      case 2:
-       glVertex3d(0, -size, 0.0f);
-       glVertex3d(size, 0, 0.0f);
-       glVertex3d(-size, 0, 0.0f);
-      break;
-      case 3:
-       glVertex3d(-size, 0, 0.0f);
-       glVertex3d(0, size, 0.0f);
-       glVertex3d(0, -size, 0.0f);
-      break;
-    }
-    
-      
+      switch(rot){
+        case 0:
+         glVertex3d(-size, 0, 0.0f);
+         glVertex3d(0, size, 0.0f);
+         glVertex3d(size, 0, 0.0f);
+        break;
+        case 1:
+         glVertex3d(size, 0, 0.0f);
+         glVertex3d(0, -size, 0.0f);
+         glVertex3d(0, size, 0.0f);
+        break;
+        case 2:
+         glVertex3d(0, -size, 0.0f);
+         glVertex3d(size, 0, 0.0f);
+         glVertex3d(-size, 0, 0.0f);
+        break;
+        case 3:
+         glVertex3d(-size, 0, 0.0f);
+         glVertex3d(0, size, 0.0f);
+         glVertex3d(0, -size, 0.0f);
+        break;
+      }
     glEnd();
   glPopMatrix();
 }
@@ -297,7 +318,7 @@ void  arena_draw_entities(){
   float player[3];
 
   for (int i = 0; i < ENTITIES_SIZE_MAX; i++){
-    arena_draw_player_model(i);  
+    arena_draw_player_model(i);
   }
 }
 
@@ -310,7 +331,7 @@ void arena_expand_terrain(){
     tile = arena_array[x][y];
     if (tile >= WALL and tile < WALL_MAX){
        arena_array[x][y] += EXPAND;
-    } 
+    }
   }}
 }
 
@@ -329,9 +350,12 @@ void arena_terrain_lower(int p){
 }
 
 void arena_damage_wall(int x, int y){
-  if (arena_array[x][y] > 0.0f and x != 0 and y != 0 and x < CELLS_ARRAY_SIZE[0] and y < CELLS_ARRAY_SIZE[1]){
+  if (WALL_CAN_BE_DESTROYED){
+  if (arena_array[x][y] > 0.0f){
+  if (x != 0 and y != 0){
+  if (x < CELLS_ARRAY_SIZE[0]-1 and y < CELLS_ARRAY_SIZE[1]-1){
     arena_array[x][y] -= LOWER_P;
-  }
+  }}}}
 }
 
 bool arena_player_move_check(int p, bool move){
@@ -423,7 +447,7 @@ void arena_cam_follow_player(int p){
       cam_look_pos[2] = 4.0f;
     break;
   }
-  
+
 }
 
 
@@ -449,14 +473,12 @@ void arena_ai_medium(int e){
       candid_rots[a++] = i;
     }
   }
-  
+
     r = (int)(random_f() * a);
     if (rot != candid_rots[r]){
       entities[e][2] = candid_rots[r];
       entities_rotated[e] = true;
     }
-
-  
 }
 
 void  arena_draw(){
@@ -521,7 +543,7 @@ void special_keys(int key, int x, int y) {
         arena_player_rotate(0, 2);
         break;
       case GLUT_KEY_F2:
-        // restart game
+        arena_spawn_entity(0);
         break;
       case GLUT_KEY_F3:
         cam_mode = 0;
@@ -545,23 +567,23 @@ void keyboard(unsigned char key, int x, int y) {
           arena_flag_terrain(0);
          break;
       case 113: // q
-        
+
         break;
       case 101: // e
-        
+
         break;
       case 97: // a
-        
+
         break;
       case 100: // d
-        
+
         break;
 
       case 119: // w
-        
+
         break;
       case 115: // s
-        
+
         break;
    }
 }
@@ -720,7 +742,7 @@ void logic_loop(int value){
   if (REALTIME){
     arena_loop();
   }
-  glutTimerFunc(LOGIC_MS, logic_loop, 0);
+  glutTimerFunc(LOGIC_FPS, logic_loop, 0);
 }
 
 int main(int argc, char** argv) {
