@@ -67,7 +67,7 @@ float cam_clear_color[4] = {0.3f, 0.05f, 0.6f, 1.0f};
 // ----------------------------------------------------------------------------
 static int CELLS_ARRAY_SIZE[]     = {32, 32};
 static int ENTITIES_SIZE_MAX      = 64;
-static int ENTITIES_SIZE_START    = 8;
+static int ENTITIES_SIZE_START    = 16;
 static int MAX_CELLS              = CELLS_ARRAY_SIZE[0]*CELLS_ARRAY_SIZE[1];
 int half[]                        = {CELLS_ARRAY_SIZE[0] * 0.5, CELLS_ARRAY_SIZE[1] * 0.5};
 
@@ -76,7 +76,7 @@ float entities[64][4]             = {{16, 16, 0, 0.8}};
 bool entities_rotated[64];
 
 static int REALTIME               = true;
-static int LOGIC_FPS              = 1000/24;
+static int LOGIC_FPS              = 1000/30;
 
 static float RANDOM_MIN_COLOUR    = 0.05f;
 static float RANDOM_MAX_COLOUR    = 0.2f;
@@ -84,7 +84,7 @@ static float RANDOM_MAX_COLOUR    = 0.2f;
 static float GROUND               = 0.4f;
 static float WALL                 = 0.5f;
 static float WALL_MAX             = 1.0f;
-static float LOWER                = 0.05f;
+static float LOWER                = 0.01f;
 static float LOWER_P              = 0.1f;
 static float EXPAND               = 0.001f;
 
@@ -347,6 +347,10 @@ void arena_terrain_lower(int p){
       arena_array[x][y] -= LOWER;
     }
   }
+
+  if(arena_array[x][y] < 0.01f){
+    arena_array[x][y] = 0.0f;
+  }
 }
 
 void arena_damage_wall(int x, int y){
@@ -383,7 +387,6 @@ bool arena_player_move_check(int p, bool move){
       entities[p][0] = x;
       entities[p][1] = y;
     }
-
     return true;
   }else{
     arena_damage_wall(x, y);
@@ -432,7 +435,7 @@ void arena_cam_follow_player(int p){
     case 1:
       cam_pos[0] = entities[0][0];
       cam_pos[1] = entities[0][1];
-      cam_pos[2] = 14.0f;
+      cam_pos[2] = 26.0f;
       cam_look_pos[0] = entities[0][0];
       cam_look_pos[1] = entities[0][1];
       cam_look_pos[2] = 4.0f;
@@ -441,7 +444,7 @@ void arena_cam_follow_player(int p){
     case 2:
       cam_pos[0] = entities[0][0];
       cam_pos[1] = entities[0][1];
-      cam_pos[2] = 26.0f;
+      cam_pos[2] = 32.0f;
       cam_look_pos[0] = entities[0][0];
       cam_look_pos[1] = entities[0][1];
       cam_look_pos[2] = 4.0f;
@@ -466,10 +469,10 @@ void arena_ai_medium(int e){
   int candid_rots[] = {rot,rot,rot,rot};
   int a = 0;
   int r = rot;
-  float treshold = 0.15f;
+  float treshold = LOWER*4.0f;
 
   for (int i = 0; i < 4; i++){
-    if(candids[rot] - candids[i] >= treshold){
+    if(candids[rot] - candids[i] > 0 and candids[rot] - candids[i] > treshold){
       candid_rots[a++] = i;
     }
   }
